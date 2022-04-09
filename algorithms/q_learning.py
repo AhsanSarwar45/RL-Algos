@@ -74,6 +74,8 @@ class EpsilonGreedyStrategy(ExplorationStrategy):
 
 
 class QLearning:
+    """Q Learning algorithm"""
+
     def __init__(
         self,
         env: Env,
@@ -83,6 +85,16 @@ class QLearning:
         max_steps_per_episode: int = 1000,
         exploration_strategy: ExplorationStrategy = EpsilonGreedyStrategy(),
     ):
+        """Initialize the QLearning model with
+
+        Args:
+            env (Env): The OpenAI gym environment to learn
+            learning_rate (int, optional): Defines how much should the values in the Q Table change with each update. Lower values give more importance to past knowledge while higher values prioritize new knowledge. Defaults to 0.1.
+            discount_factor (int, optional): Defines how much weight to give to the following states. High values mean the agent values long-term action, while lower values mean that the agent focuses on the immediate action. For sparse environments, it is recommended to set this to a high value. Defaults to 0.99.
+            num_episodes (int, optional): The number of episodes to learn from. The end of any episode is determined by the environment. Defaults to 1000.
+            max_steps_per_episode (int, optional): The maximum steps before an episode gets terminated regardless of whether it has finished or not. Helps guard against the agent getting stuck. Defaults to 1000.
+            exploration_strategy (ExplorationStrategy, optional): The exploration strategy to follow. Determines how the agent chooses actions. Defaults to EpsilonGreedyStrategy().
+        """
         self.env = env
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
@@ -90,10 +102,9 @@ class QLearning:
         self.num_episodes = num_episodes
         self.max_steps_per_episode = max_steps_per_episode
         self.q_table = np.zeros((self.env.observation_space.n, self.env.action_space.n))
-        self.rewards_all_episodes = []
+        self.rewards_all_episodes = [] # contains sum of rewards for each episode
 
     def update_qtable(self, state: State, new_state: State, action, reward):
-
         self.q_table[state, action] = (
             self.q_table[state, action] * (1 - self.learning_rate)
             + (reward + self.discount_factor * np.max(self.q_table[new_state])) * self.learning_rate
@@ -104,6 +115,8 @@ class QLearning:
         self.rewards_all_episodes = []
 
     def learn(self):
+        """Run the algorithm to learn and update the Q Table
+        """
         self.reset()
         for episode in range(self.num_episodes):
             state = self.env.reset()
@@ -112,6 +125,8 @@ class QLearning:
             rewards_current_episode = 0
 
             for step in range(self.max_steps_per_episode):
+
+                # select an action based on the exploration strategy
                 action = self.exploration_strategy.sample_action(self.env, state, self.q_table)
 
                 new_state, reward, done, info = self.env.step(action)
@@ -121,7 +136,6 @@ class QLearning:
                 state = new_state
                 rewards_current_episode += reward
 
-                # If our agent reached the finished line or fell into a hole, then finish episode
                 if done:
                     break
 
@@ -130,6 +144,11 @@ class QLearning:
             self.rewards_all_episodes.append(rewards_current_episode)
 
     def evaluate(self, num_episodes=1000):
+        """Evaluate the performance of the models
+
+        Args:
+            num_episodes (int, optional): The number of episodes to evaluate. The end of any episode is determined by the environment. Defaults to 1000.
+        """
         total_reward = 0
 
         for episode in range(num_episodes):
