@@ -10,6 +10,54 @@ State = np.ndarray
 QTable = np.ndarray
 
 
+class EpsilonStrategy(ABC):
+    @abstractmethod
+    def get_epsilon(self) -> float:
+        pass
+
+    @abstractmethod
+    def update(self, episode_num: int):
+        pass
+
+
+class ConstantEpsilon(EpsilonStrategy):
+    def __init__(self, epsilon: float):
+        self.epsilon = epsilon
+
+    def get_epsilon(self) -> float:
+        return self.epsilon
+
+    def update(self, episode_num: int):
+        pass
+
+
+class LinearEpsilon(EpsilonStrategy):
+    def __init__(self, start: float = 1, min: float = 0.01, decay_rate: float = 0.001):
+        self.min = min
+        self.decay_rate = decay_rate
+        self.current = start
+
+    def get_epsilon(self) -> float:
+        return self.current
+
+    def update(self, episode_num: int):
+        self.current = max(self.current - self.decay_rate, self.min)
+
+
+class ExponentialEpsilon(EpsilonStrategy):
+    def __init__(self, start: float = 1, min: float = 0.01, decay_rate: float = 0.001):
+        self.min = min
+        self.decay_rate = decay_rate
+        self.current = start
+        self.range = start - min
+
+    def get_epsilon(self) -> float:
+        return self.current
+
+    def update(self, episode_num: int):
+        self.current = self.min + (self.range) * np.exp(-self.decay_rate * episode_num)
+
+
 class ExplorationStrategy(ABC):
     @abstractmethod
     def __init__(self):
@@ -20,11 +68,13 @@ class ExplorationStrategy(ABC):
         pass
 
     @abstractmethod
-    def update(self, episode: int):
+    def update(self, episode_num: int):
         pass
 
 
 class GreedyStrategy(ExplorationStrategy):
+    """Exploit-only strategy. Takes the action with the highest reward"""
+
     def __init__(self):
         pass
 
@@ -43,21 +93,13 @@ class GreedyStrategy(ExplorationStrategy):
 class EpsilonGreedyStrategy(ExplorationStrategy):
     def __init__(
         self,
-        initial_exploration_rate: float = 1,
-        min_exploration_rate: float = 0.01,
-        exploration_decay_rate: float = 0.001,
-        exponential_decay: bool = True,
+        epsilon_strategy: EpsilonStrategy = ExponentialEpsilon(),
     ):
-        self.exploration_rate = initial_exploration_rate
-        self.min_exploration_rate = min_exploration_rate
-        self.exploration_decay_rate = exploration_decay_rate
-        self.exponential_decay = exponential_decay
-        self.exploration_rate_range = initial_exploration_rate - min_exploration_rate
-        pass
+        self.epsilon_strategy = epsilon_strategy
 
     def sample_action(self, env: Env, state: State, q_table: QTable):
         exploration_rate_threshold = random.uniform(0, 1)
-        if exploration_rate_threshold > self.exploration_rate:
+        if exploration_rate_threshold > self.epsilon_strategy.get_epsilon():
             # Choose action with highest q value for the state
             return np.argmax(q_table[state])
         else:
@@ -65,12 +107,7 @@ class EpsilonGreedyStrategy(ExplorationStrategy):
             return env.action_space.sample()
 
     def update(self, episode_num: int):
-        if self.exponential_decay:
-            self.exploration_rate = self.min_exploration_rate + (self.exploration_rate_range) * np.exp(
-                -self.exploration_decay_rate * episode_num
-            )
-        else:
-            self.exploration_rate = max(self.exploration_rate - self.exploration_decay_rate, self.min_exploration_rate)
+        self.epsilon_strategy.update(episode_num)
 
 
 class QLearning:
@@ -102,7 +139,9 @@ class QLearning:
         self.num_episodes = num_episodes
         self.max_steps_per_episode = max_steps_per_episode
         self.q_table = np.zeros((self.env.observation_space.n, self.env.action_space.n))
-        self.rewards_all_episodes = [] # contains sum of rewards for each episode
+        self.rewards_all_episodes = []  # contains sum of rewards for each episode
+
+        print(f"Q-Learning with {self.exploration_strategy.__class__.__name__} exploration strategy")
 
     def update_qtable(self, state: State, new_state: State, action, reward):
         self.q_table[state, action] = (
@@ -115,8 +154,7 @@ class QLearning:
         self.rewards_all_episodes = []
 
     def learn(self):
-        """Run the algorithm to learn and update the Q Table
-        """
+        """Run the algorithm to learn and update the Q Table"""
         self.reset()
         for episode in range(self.num_episodes):
             state = self.env.reset()
@@ -163,7 +201,7 @@ class QLearning:
                 state = new_state
                 total_reward += reward
 
-        print(f"Average reward: {total_reward/num_episodes}")
+        print(f"Average reward: {total_reward/num_episodes}\nTotal reward: {total_reward}")
 
     def predict(self, observation: State):
         return np.argmax(self.q_table[observation, :])
